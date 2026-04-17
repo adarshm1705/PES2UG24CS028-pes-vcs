@@ -114,21 +114,51 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
     return 0;
 }
 
-// ─── TODO: Implement these ──────────────────────────────────────────────────
+int tree_from_index(ObjectID *id_out) {
+    Index index;
 
-// Build a tree hierarchy from the current index and write all tree
-// objects to the object store.
-//
-// HINTS - Useful functions and concepts for this phase:
-//   - index_load      : load the staged files into memory
-//   - strchr          : find the first '/' in a path to separate directories from files
-//   - strncmp         : compare prefixes to group files belonging to the same subdirectory
-//   - Recursion       : you will likely want to create a recursive helper function 
-//                       (e.g., `write_tree_level(entries, count, depth)`) to handle nested dirs.
-//   - tree_serialize  : convert your populated Tree struct into a binary buffer
-//   - object_write    : save that binary buffer to the store as OBJ_TREE
-//
-// Returns 0 on success, -1 on error.
+    // Load index (staged files)
+    if (index_load(&index) != 0) return -1;
+
+    Tree tree;
+    tree.count = 0;
+
+    for (int i = 0; i < index.count; i++) {
+        IndexEntry *entry = &index.entries[i];
+
+        TreeEntry *tentry = &tree.entries[tree.count];
+
+        // Set mode
+        tentry->mode = MODE_FILE;
+
+        // Copy filename (only base name, ignore directories for now)
+        const char *name = entry->path;
+        const char *slash = strrchr(name, '/');
+        if (slash) name = slash + 1;
+
+        strcpy(tentry->name, name);
+
+        // Copy hash
+        tentry->hash = entry->id;
+
+        tree.count++;
+    }
+
+    // Serialize tree
+    void *data;
+    size_t len;
+
+    if (tree_serialize(&tree, &data, &len) != 0) return -1;
+
+    // Write tree object
+    if (object_write(OBJ_TREE, data, len, id_out) != 0) {
+        free(data);
+        return -1;
+    }
+
+    free(data);
+    return 0;
+}
 int tree_from_index(ObjectID *id_out) {
     // TODO: Implement recursive tree building
     // (See Lab Appendix for logical steps)
